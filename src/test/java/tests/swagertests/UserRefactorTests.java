@@ -3,57 +3,57 @@ package tests.swagertests;
 import io.restassured.RestAssured;
 import io.restassured.filter.log.RequestLoggingFilter;
 import io.restassured.filter.log.ResponseLoggingFilter;
+import listener.AdminUser;
+import listener.AdminUserResolver;
 import models.swager.FullUser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import services.UserService;
 import utils.CustomTpl;
 import java.util.List;
-import java.util.Random;
 import static assertions.Conditions.hasMessage;
 import static assertions.Conditions.hasStatusCode;
+import static utils.RandomTestData.*;
 
-
+@ExtendWith({AdminUserResolver.class})
 public class UserRefactorTests {
-    private static Random random;
     private static UserService userService;
+    private FullUser user;
+
+    @BeforeEach
+    public void initTestUser(){
+        user = getRandomUser();
+    }
 
     @BeforeAll
     public static void setUp(){
         RestAssured.baseURI = "http://85.192.34.140:8080/";
         RestAssured.filters(new RequestLoggingFilter(), new ResponseLoggingFilter(),
                 CustomTpl.customLogFilter().withCustomTemplates());
-        random = new Random();
         userService = new UserService();
-    }
-
-    private FullUser getRandomUser(){
-        int randomNumber = Math.abs(random.nextInt());
-        return FullUser.builder()
-                .login("testUserLogin" + randomNumber)
-                .pass("testpass")
-                .build();
-    }
-
-    private FullUser getAdminUser(){
-        return FullUser.builder()
-                .login("admin")
-                .pass("admin")
-                .build();
     }
 
     @Test
     public void positiveRegisterTest(){
-        FullUser user = getRandomUser();
         userService.register(user)
                 .should(hasStatusCode(201))
                 .should(hasMessage("User created"));
     }
 
     @Test
+    public void positiveRegisterWithGamesTest(){
+        FullUser user = getRandomUserWithGames();
+        userService.register(user)
+                .should(hasStatusCode(201))
+                .should(hasMessage("User created"));
+    }
+
+
+    @Test
     public void negativRegisterLoginExistsTest(){
-        FullUser user = getRandomUser();
         userService.register(user);
         userService.register(user)
                 .should(hasStatusCode(400))
@@ -62,7 +62,6 @@ public class UserRefactorTests {
 
     @Test
     public void negativRegisterNoPasswordTest(){
-        FullUser user = getRandomUser();
         user.setPass(null);
 
         userService.register(user)
@@ -71,10 +70,8 @@ public class UserRefactorTests {
     }
 
     @Test
-    public void positiveAuthTest(){
-        FullUser user = getAdminUser();
-
-        String token = userService.auth(user)
+    public void positiveAdminAuthTest(@AdminUser FullUser admin){
+        String token = userService.auth(admin)
                 .should(hasStatusCode(200))
                 .asJwt();
 
@@ -83,7 +80,6 @@ public class UserRefactorTests {
 
     @Test
     public void positiveNewUserAuthTest(){
-        FullUser user = getRandomUser();
         userService.register(user);
         String token = userService.auth(user)
                 .should(hasStatusCode(200)).asJwt();
@@ -93,14 +89,12 @@ public class UserRefactorTests {
 
     @Test
     public void negativeAuthTest(){
-        FullUser user = getRandomUser();
         userService.auth(user).should(hasStatusCode(401));
     }
 
     @Test
-    public void positiveGetUserInfoTest(){
-        FullUser user = getAdminUser();
-        String token = userService.auth(user).asJwt();
+    public void positiveGetUserInfoTest(@AdminUser FullUser admin){
+        String token = userService.auth(admin).asJwt();
         userService.getUserInfo(token)
                 .should(hasStatusCode(200));
     }
@@ -117,7 +111,6 @@ public class UserRefactorTests {
 
     @Test
     public void positiveChangePassTest(){
-        FullUser user = getRandomUser();
         String oldPassword = user.getPass();
         userService.register(user);
 
@@ -139,10 +132,8 @@ public class UserRefactorTests {
     }
 
     @Test
-    public void negativeChangeAdminPasswordTest(){
-        FullUser user = getAdminUser();
-
-        String token = userService.auth(user).asJwt();
+    public void negativeChangeAdminPasswordTest(@AdminUser FullUser admin){
+        String token = userService.auth(admin).asJwt();
 
         String updatedPassValue = "newpassUpdated";
         userService.updatePass(updatedPassValue, token)
@@ -151,10 +142,8 @@ public class UserRefactorTests {
     }
 
     @Test
-    public void negativeDeletedAdminTest(){
-        FullUser user = getAdminUser();
-
-        String token = userService.auth(user).asJwt();
+    public void negativeDeletedAdminTest(@AdminUser FullUser admin){
+        String token = userService.auth(admin).asJwt();
 
         userService.deleteUser(token).should(hasStatusCode(400))
                 .should(hasMessage("Cant delete base users"));
@@ -162,7 +151,6 @@ public class UserRefactorTests {
 
     @Test
     public void positiveDeletedUserTest(){
-        FullUser user = getRandomUser();
         userService.register(user);
         String token = userService.auth(user).asJwt();
 
